@@ -55,3 +55,15 @@ tests/     test del core e del motore
 ```
 
 Battute separate da `|`; più accordi nella stessa battuta divisi in parti uguali; `_` tiene l'accordo un battito in più (`A7 _ _ Eb7` = 3+1); `%` ripete la battuta precedente; `NC` nessun accordo; `[A]` apre una sezione.
+
+## Release firmate e notarizzate
+
+Il workflow `.github/workflows/release.yml` parte a ogni tag `v*` (es. `git tag v0.1.0 && git push --tags`): compila universal (arm64 + x86_64), firma con il Developer ID, notarizza con Apple, applica lo staple e pubblica `Giro-<versione>.dmg` nella Release di GitHub. Richiede questi secret nel repo (Settings → Secrets and variables → Actions):
+
+| Secret | Contenuto |
+|---|---|
+| `MAC_CERT_P12` | certificato **Developer ID Application** esportato da Portachiavi come `.p12`, in base64 (`base64 -i cert.p12 \| pbcopy`) |
+| `MAC_CERT_PASSWORD` | password scelta all'esportazione del `.p12` |
+| `ASC_KEY_ID` | Key ID della API key di App Store Connect (Users and Access → Integrations → App Store Connect API) |
+| `ASC_ISSUER_ID` | Issuer ID della stessa pagina |
+| `ASC_KEY_P8` | contenuto del file `AuthKey_XXXX.p8` |

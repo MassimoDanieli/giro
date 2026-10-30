@@ -1,0 +1,84 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    runs-on: macos-14
+    env:
+      TEAM_ID: ZWQ6ZD3SC4
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import Developer ID certificate
+        env:
+          MAC_CERT_P12: ${{ secrets.MAC_CERT_P12 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: |
+          set -e
+          echo "$MAC_CERT_P12" | base64 --decode > cert.p12
+          KEYCHAIN=build.keychain-db
+          security create-keychain -p ci "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p ci "$KEYCHAIN"
+          security import cert.p12 -k "$KEYCHAIN" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          rm cert.p12
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+      - name: Build
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          cmake --build build --config Release --target Giro giro_tests giro_ireal_tests giro_engine_test -j4
+          cd build && ctest --output-on-failure
+
+      - name: Sign
+        run: |
+          APP=build/Giro_artefacts/Release/Giro.app
+          IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+          echo "Signing with: $IDENTITY"
+          codesign --force --deep --options runtime --timestamp --sign "$IDENTITY" "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+      - name: Notarize
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -e
+          APP=build/Giro_artefacts/Release/Giro.app
+          echo "$ASC_KEY_P8" > AuthKey.p8
+          ditto -c -k --keepParent "$APP" Giro-notarize.zip
+          xcrun notarytool submit Giro-notarize.zip --key AuthKey.p8 --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" --wait
+          xcrun stapler staple "$APP"
+          rm AuthKey.p8 Giro-notarize.zip
+
+      - name: Package DMG
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          [ "$GITHUB_REF_NAME" = "$VERSION" ] && VERSION=dev
+          mkdir -p dmg && cp -R build/Giro_artefacts/Release/Giro.app dmg/ && ln -s /Applications dmg/Applications
+          hdiutil create -volname "Giro $VERSION" -srcfolder dmg -ov -format UDZO "Giro-$VERSION.dmg"
+          IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+          codesign --force --timestamp --sign "$IDENTITY" "Giro-$VERSION.dmg"
+          spctl --assess --type open --context context:primary-signature -v "Giro-$VERSION.dmg" || true
+          echo "DMG=Giro-$VERSION.dmg" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Giro-dmg
+          path: ${{ env.DMG }}
+
+      - name: GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.DMG }}
+          generate_release_notes: true
