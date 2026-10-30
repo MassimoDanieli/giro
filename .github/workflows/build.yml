@@ -1,0 +1,25 @@
+name: build
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release --target Giro giro_tests giro_ireal_tests giro_engine_test -j4
+      - name: Test
+        run: cd build && ctest --output-on-failure
+      - name: Package
+        run: cd build/Giro_artefacts/Release && ditto -c -k --keepParent Giro.app Giro-mac.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Giro-mac
+          path: build/Giro_artefacts/Release/Giro-mac.zip
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev libfreetype6-dev libfontconfig1-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxcomposite-dev libxext-dev libcurl4-openssl-dev libgl-dev
+      - run: cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target Giro giro_tests giro_ireal_tests giro_engine_test -j4 && cd build && ctest --output-on-failure
