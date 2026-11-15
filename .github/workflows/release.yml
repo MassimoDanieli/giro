@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   mac:
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       TEAM_ID: ZWQ6ZD3SC4
     steps:
