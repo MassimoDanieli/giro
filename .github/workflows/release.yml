@@ -54,7 +54,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: build/_deps
-          key: juce-8.0.4-universal-${{ runner.os }}
+          key: juce-8.0.17-universal-${{ runner.os }}
 
       - name: Build
         run: |

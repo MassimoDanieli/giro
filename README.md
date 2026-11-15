@@ -11,7 +11,7 @@ App nativa (C++ / JUCE) per giri di accordi play-along: griglia stile lead sheet
 ## Compilare su Mac
 
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release      # scarica JUCE 8.0.4 da GitHub la prima volta
+cmake -B build -DCMAKE_BUILD_TYPE=Release      # scarica JUCE 8.0.17 da GitHub la prima volta
 cmake --build build --target Giro -j8
 open build/Giro_artefacts/Release/Giro.app     # oppure trascinala in /Applications
 ```

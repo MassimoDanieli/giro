@@ -3,12 +3,12 @@ project(Giro VERSION 0.1.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# JUCE: use a local checkout if given (-DGIRO_JUCE_DIR=/path/to/JUCE), otherwise fetch 8.0.4 from GitHub.
+# JUCE: use a local checkout if given (-DGIRO_JUCE_DIR=/path/to/JUCE), otherwise fetch 8.0.17-security from GitHub.
 if(GIRO_JUCE_DIR)
   add_subdirectory(${GIRO_JUCE_DIR} juce)
 else()
   include(FetchContent)
-  FetchContent_Declare(JUCE GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG 8.0.4 GIT_SHALLOW TRUE)
+  FetchContent_Declare(JUCE GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG 8.0.17-security GIT_SHALLOW TRUE)
   FetchContent_MakeAvailable(JUCE)
 endif()
 
