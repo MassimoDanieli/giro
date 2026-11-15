@@ -22,16 +22,21 @@ jobs:
           path: build/_deps
           key: juce-8.0.17-${{ runner.os }}
       - name: Configure
+        shell: bash
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release 2>&1 | tee configure.log
       - name: Build
+        shell: bash
         run: cmake --build build --config Release --target Giro giro_tests giro_ireal_tests giro_engine_test -j4 2>&1 | tee build.log
-      # Surface compiler errors as annotations, readable without opening the log.
+      - name: Test
+        shell: bash
+        run: cd build && ctest --output-on-failure 2>&1 | tee ../test.log
+      # Surface errors and failing checks as annotations, readable without opening the log.
       - name: Report errors
         if: failure()
+        shell: bash
         run: |
-          cat configure.log build.log 2>/dev/null | grep -E "(error|Error)[: ]" | head -15 | sed 's/^/::error::/' || true
-      - name: Test
-        run: cd build && ctest --output-on-failure
+          cat configure.log build.log test.log 2>/dev/null \
+            | grep -E "(error|Error)[: ]|FAIL|Failed|\*\*\*|expected|got " | head -20 | sed 's/^/::error::/' || true
       - name: Package
         run: cd build/Giro_artefacts/Release && ditto -c -k --keepParent Giro.app Giro-mac.zip
       - uses: actions/upload-artifact@v7
