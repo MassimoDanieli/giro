@@ -42,13 +42,15 @@ bool parseMidi(const std::vector<uint8_t>& bytes, MidiFile& out, std::string& er
         std::map<int, RawNote> open;
         while (r.p < end && r.p < bytes.size()) {
             tick += r.vlq();
+            if (r.p >= bytes.size() || r.p >= end) break;          // truncated track
             uint8_t b = bytes[r.p];
-            if (b < 0x80) b = status; else { r.p++; if (b < 0xf0) status = b; }
+            if (b < 0x80) { if (!status) break; b = status; }       // data byte with no running status
+            else { r.p++; if (b < 0xf0) status = b; }
             if (b == 0xff) {
                 uint8_t type = r.u8(); uint32_t l = r.vlq(); size_t start = r.p; r.p += l;
                 if (start + l > bytes.size()) break;
                 if (type == 0x51 && l >= 3) { uint32_t us = (bytes[start] << 16) | (bytes[start + 1] << 8) | bytes[start + 2]; if (us) tempos.push_back({tick, 60e6 / us}); }
-                else if (type == 0x58 && l >= 2 && !sawTs) { out.num = bytes[start]; out.den = 1 << bytes[start + 1]; sawTs = true; }
+                else if (type == 0x58 && l >= 2 && !sawTs) { out.num = bytes[start]; out.den = 1 << std::min<int>(bytes[start + 1], 6); sawTs = true; }
                 else if (type == 0x03 && !sawTitle) { std::string s(bytes.begin() + start, bytes.begin() + start + l); if (s.find_first_not_of(" \t") != std::string::npos) { out.title = s; sawTitle = true; } }
                 else if (type == 0x59 && l >= 2 && out.keySig.empty()) {
                     int sf = (int8_t)bytes[start]; bool minor = bytes[start + 1] == 1;
@@ -89,7 +91,9 @@ DetectedSong detectChords(const MidiFile& midi) {
     double firstBeat = 1e18, lastBeat = 0;
     for (auto& n : midi.notes) { firstBeat = std::min(firstBeat, n.start / beatLen); lastBeat = std::max(lastBeat, n.end / beatLen); }
     double offset = std::floor(firstBeat / bpb) * bpb;      // in chart beats
-    int nBars = std::max(1, (int)std::ceil((lastBeat - offset) / bpb));
+    // Cap the grid: a corrupt file with huge delta-times must not allocate billions of beats.
+    constexpr int kMaxBars = 2048;
+    int nBars = (int)std::clamp(std::ceil((lastBeat - offset) / bpb), 1.0, (double)kMaxBars);
     int nBeats = nBars * bpb;
 
     struct BeatInfo { double w[12] = {0}; double total = 0; int low = -1; double lowW = 0; };

@@ -2,3 +2,5 @@ build/
 xcode/
 .DS_Store
 *.xcodeproj
+# written by giro_tests when GIRO_DUMP_TEST_MID=1
+test.mid

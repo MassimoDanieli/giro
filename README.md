@@ -58,7 +58,12 @@ Battute separate da `|`; più accordi nella stessa battuta divisi in parti ugual
 
 ## Release firmate e notarizzate
 
-Il workflow `.github/workflows/release.yml` parte a ogni tag `v*` (es. `git tag v0.1.0 && git push --tags`): compila universal (arm64 + x86_64), firma con il Developer ID, notarizza con Apple, applica lo staple e pubblica `Giro-<versione>.dmg` nella Release di GitHub. Richiede questi secret nel repo (Settings → Secrets and variables → Actions):
+Il workflow `.github/workflows/release.yml` parte a ogni tag `v*` (es. `git tag v0.1.1 && git push --tags`): compila universal (arm64 + x86_64), esegue i test e pubblica il DMG nella Release di GitHub.
+
+- **Con i secret qui sotto**: firma con il Developer ID, notarizza con Apple, applica lo staple → `Giro-<versione>.dmg`.
+- **Senza secret**: firma ad-hoc → `Giro-<versione>-unsigned.dmg`, pubblicata come pre-release. Al primo avvio: tasto destro sull'app → Apri.
+
+Secret (Settings → Secrets and variables → Actions):
 
 | Secret | Contenuto |
 |---|---|
