@@ -84,7 +84,7 @@ void SimpleSynth::process(juce::AudioBuffer<float>& out, juce::MidiBuffer& midi)
 #if JUCE_MAC
 std::unique_ptr<AppleGMSynth> AppleGMSynth::tryCreate(double sampleRate, int blockSize) {
     juce::AudioPluginFormatManager fm;
-    fm.addDefaultFormats();
+    juce::addDefaultFormatsToManager(fm);   // the member addDefaultFormats() was removed in JUCE 8
     for (auto* format : fm.getFormats()) {
         if (format->getName() != "AudioUnit") continue;
         juce::OwnedArray<juce::PluginDescription> found;

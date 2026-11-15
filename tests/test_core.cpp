@@ -113,7 +113,8 @@ int main() {
     std::vector<uint8_t> file = {'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 0, 0, 1, (uint8_t)(ppq >> 8), (uint8_t)(ppq & 255), 'M', 'T', 'r', 'k',
                                  (uint8_t)(body.size() >> 24), (uint8_t)(body.size() >> 16), (uint8_t)(body.size() >> 8), (uint8_t)(body.size() & 255)};
     file.insert(file.end(), body.begin(), body.end());
-    { std::ofstream f("test.mid", std::ios::binary); f.write((const char*)file.data(), (std::streamsize)file.size()); }
+    // Set GIRO_DUMP_TEST_MID=1 to write the generated file for manual inspection.
+    if (std::getenv("GIRO_DUMP_TEST_MID")) { std::ofstream f("test.mid", std::ios::binary); f.write((const char*)file.data(), (std::streamsize)file.size()); }
 
     MidiFile mf; std::string err;
     CHECK(parseMidi(file, mf, err));
@@ -129,6 +130,27 @@ int main() {
     std::printf("%s\n", chartToText(det.bars, 4).c_str());
     std::vector<uint8_t> junk = {1, 2, 3};
     CHECK(!parseMidi(junk, mf, err));
+
+    // Corrupt files must not crash (found by fuzzing under AddressSanitizer).
+    {
+        // every truncation of a valid file parses or fails cleanly
+        for (size_t n = 0; n <= file.size(); n++) {
+            std::vector<uint8_t> cut(file.begin(), file.begin() + (std::ptrdiff_t)n);
+            MidiFile m2; std::string e2;
+            if (parseMidi(cut, m2, e2)) detectChords(m2);
+        }
+        // track that ends right after a delta-time
+        std::vector<uint8_t> t1 = {'M','T','h','d',0,0,0,6,0,0,0,1,0,96,'M','T','r','k',0,0,0,1,0x81};
+        MidiFile m3; std::string e3; parseMidi(t1, m3, e3);
+        // absurd time-signature denominator exponent and a note 4 billion ticks in
+        std::vector<uint8_t> t2 = {'M','T','h','d',0,0,0,6,0,0,0,1,0,1,'M','T','r','k',0,0,0,20,
+                                   0x00,0xff,0x58,0x04,4,200,24,8, 0x00,0x90,60,100, 0x8f,0xff,0xff,0x7f,0x80,60,0};
+        MidiFile m4; std::string e4;
+        CHECK(parseMidi(t2, m4, e4));
+        CHECK(m4.den <= 64);
+        auto d4 = detectChords(m4);
+        CHECK(d4.bars.size() <= 2048);
+    }
 
     if (fails) { std::printf("%d FAILURES\n", fails); return 1; }
     std::printf("ALL OK\n");

@@ -9,13 +9,31 @@ permissions:
 
 jobs:
   mac:
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       TEAM_ID: ZWQ6ZD3SC4
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+
+      # Signing is optional: without the secrets the release still ships a
+      # DMG, ad-hoc signed and marked as unsigned (first launch: right-click
+      # → Open). Add the secrets listed in the README to get a signed,
+      # notarized DMG instead. v0.1.0 failed here because they were missing.
+      - name: Check signing secrets
+        id: signing
+        env:
+          MAC_CERT_P12: ${{ secrets.MAC_CERT_P12 }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          if [ -n "$MAC_CERT_P12" ] && [ -n "$ASC_KEY_P8" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Signing secrets not set: building an UNSIGNED DMG. See README → Release firmate e notarizzate."
+          fi
 
       - name: Import Developer ID certificate
+        if: steps.signing.outputs.enabled == 'true'
         env:
           MAC_CERT_P12: ${{ secrets.MAC_CERT_P12 }}
           MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
@@ -32,13 +50,20 @@ jobs:
           rm cert.p12
           security find-identity -v -p codesigning "$KEYCHAIN"
 
+      - name: Cache JUCE
+        uses: actions/cache@v6
+        with:
+          path: build/_deps
+          key: juce-8.0.17-universal-${{ runner.os }}
+
       - name: Build
         run: |
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
           cmake --build build --config Release --target Giro giro_tests giro_ireal_tests giro_engine_test -j4
           cd build && ctest --output-on-failure
 
-      - name: Sign
+      - name: Sign (Developer ID)
+        if: steps.signing.outputs.enabled == 'true'
         run: |
           APP=build/Giro_artefacts/Release/Giro.app
           IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
@@ -46,7 +71,12 @@ jobs:
           codesign --force --deep --options runtime --timestamp --sign "$IDENTITY" "$APP"
           codesign --verify --deep --strict --verbose=2 "$APP"
 
+      - name: Sign (ad-hoc)
+        if: steps.signing.outputs.enabled != 'true'
+        run: codesign --force --deep --sign - build/Giro_artefacts/Release/Giro.app
+
       - name: Notarize
+        if: steps.signing.outputs.enabled == 'true'
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -55,30 +85,39 @@ jobs:
           set -e
           APP=build/Giro_artefacts/Release/Giro.app
           echo "$ASC_KEY_P8" > AuthKey.p8
+          trap 'rm -f AuthKey.p8 Giro-notarize.zip' EXIT
           ditto -c -k --keepParent "$APP" Giro-notarize.zip
           xcrun notarytool submit Giro-notarize.zip --key AuthKey.p8 --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" --wait
           xcrun stapler staple "$APP"
-          rm AuthKey.p8 Giro-notarize.zip
 
       - name: Package DMG
+        env:
+          SIGNED: ${{ steps.signing.outputs.enabled }}
         run: |
           VERSION=${GITHUB_REF_NAME#v}
           [ "$GITHUB_REF_NAME" = "$VERSION" ] && VERSION=dev
+          SUFFIX=""; [ "$SIGNED" = true ] || SUFFIX="-unsigned"
+          DMG="Giro-$VERSION$SUFFIX.dmg"
           mkdir -p dmg && cp -R build/Giro_artefacts/Release/Giro.app dmg/ && ln -s /Applications dmg/Applications
-          hdiutil create -volname "Giro $VERSION" -srcfolder dmg -ov -format UDZO "Giro-$VERSION.dmg"
-          IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
-          codesign --force --timestamp --sign "$IDENTITY" "Giro-$VERSION.dmg"
-          spctl --assess --type open --context context:primary-signature -v "Giro-$VERSION.dmg" || true
-          echo "DMG=Giro-$VERSION.dmg" >> "$GITHUB_ENV"
+          hdiutil create -volname "Giro $VERSION" -srcfolder dmg -ov -format UDZO "$DMG"
+          if [ "$SIGNED" = true ]; then
+            IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+            codesign --force --timestamp --sign "$IDENTITY" "$DMG"
+            spctl --assess --type open --context context:primary-signature -v "$DMG" || true
+          fi
+          echo "DMG=$DMG" >> "$GITHUB_ENV"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Giro-dmg
           path: ${{ env.DMG }}
 
       - name: GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ${{ env.DMG }}
           generate_release_notes: true
+          prerelease: ${{ steps.signing.outputs.enabled != 'true' }}
+          body: >-
+            ${{ steps.signing.outputs.enabled != 'true' && 'Build **non firmata**: al primo avvio, tasto destro sull''app → Apri. / **Unsigned** build: right-click the app → Open on first launch.' || '' }}

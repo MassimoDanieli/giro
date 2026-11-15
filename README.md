@@ -11,7 +11,7 @@ App nativa (C++ / JUCE) per giri di accordi play-along: griglia stile lead sheet
 ## Compilare su Mac
 
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release      # scarica JUCE 8.0.4 da GitHub la prima volta
+cmake -B build -DCMAKE_BUILD_TYPE=Release      # scarica JUCE 8.0.17 da GitHub la prima volta
 cmake --build build --target Giro -j8
 open build/Giro_artefacts/Release/Giro.app     # oppure trascinala in /Applications
 ```
@@ -58,7 +58,12 @@ Battute separate da `|`; più accordi nella stessa battuta divisi in parti ugual
 
 ## Release firmate e notarizzate
 
-Il workflow `.github/workflows/release.yml` parte a ogni tag `v*` (es. `git tag v0.1.0 && git push --tags`): compila universal (arm64 + x86_64), firma con il Developer ID, notarizza con Apple, applica lo staple e pubblica `Giro-<versione>.dmg` nella Release di GitHub. Richiede questi secret nel repo (Settings → Secrets and variables → Actions):
+Il workflow `.github/workflows/release.yml` parte a ogni tag `v*` (es. `git tag v0.1.1 && git push --tags`): compila universal (arm64 + x86_64), esegue i test e pubblica il DMG nella Release di GitHub.
+
+- **Con i secret qui sotto**: firma con il Developer ID, notarizza con Apple, applica lo staple → `Giro-<versione>.dmg`.
+- **Senza secret**: firma ad-hoc → `Giro-<versione>-unsigned.dmg`, pubblicata come pre-release. Al primo avvio: tasto destro sull'app → Apri.
+
+Secret (Settings → Secrets and variables → Actions):
 
 | Secret | Contenuto |
 |---|---|
